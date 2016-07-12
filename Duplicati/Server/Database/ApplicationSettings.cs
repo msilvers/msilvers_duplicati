@@ -18,6 +18,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Duplicati.Server.Database
 {
@@ -40,7 +41,10 @@ namespace Duplicati.Server.Database
             public const string UNACKED_ERROR = "unacked-error";
             public const string UNACKED_WARNING = "unacked-warning";
             public const string SERVER_LISTEN_INTERFACE = "server-listen-interface";
+            public const string SERVER_SSL_CERTIFICATE = "server-ssl-certificate";
             public const string HAS_FIXED_INVALID_BACKUPID = "has-fixed-invalid-backup-id";
+            public const string UPDATE_CHANNEL = "update-channel";
+            public const string USAGE_REPORTER_LEVEL = "usage-reporter-level";
         }
         
         private Dictionary<string, string> m_values;
@@ -62,7 +66,7 @@ namespace Duplicati.Server.Database
                 foreach(var n in typeof(CONST).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.DeclaredOnly | System.Reflection.BindingFlags.Static).Select(x => (string)x.GetValue(null)))
                     m_values[n] = null;
                 foreach(var n in m_connection.GetSettings(Connection.APP_SETTINGS_ID))
-                    m_values[n.Name] =  n.Value;
+                    m_values[n.Name] = n.Value;
             }
         }
 
@@ -78,7 +82,10 @@ namespace Duplicati.Server.Database
                     m_values.Clear();
 
                 foreach(var k in newsettings)
-                    m_values[k.Key] = newsettings[k.Key];
+                    if (!clearExisting && newsettings[k.Key] == null && k.Key.StartsWith("--"))
+                        m_values.Remove(k.Key);
+                    else
+                        m_values[k.Key] = newsettings[k.Key];
 
                 SaveSettings();
             }
@@ -96,6 +103,9 @@ namespace Duplicati.Server.Database
                     Name = n.Key,
                     Value = n.Value
                 }, Database.Connection.APP_SETTINGS_ID);
+
+            // In case the usage reporter is enabled or disabled, refresh now
+            Program.StartOrStopUsageReporter();
         }
         
         public string StartupDelayDuration
@@ -397,6 +407,41 @@ namespace Duplicati.Server.Database
             }
         }
 
+        public X509Certificate2 ServerSSLCertificate
+        {
+            get
+            {
+                try
+                {
+                    if(String.IsNullOrEmpty(m_values[CONST.SERVER_SSL_CERTIFICATE]))
+                        return null;
+
+                    var cert = new X509Certificate2();
+                    
+                    cert.Import(Convert.FromBase64String(m_values[CONST.SERVER_SSL_CERTIFICATE]));
+                    return cert;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            set
+            {
+                if (value == null)
+                {
+                    lock (m_connection.m_lock)
+                        m_values[CONST.SERVER_SSL_CERTIFICATE] = String.Empty;
+                }
+                else
+                { 
+                    lock (m_connection.m_lock)
+                        m_values[CONST.SERVER_SSL_CERTIFICATE] = Convert.ToBase64String(value.Export(X509ContentType.Pkcs12));
+                }
+                SaveSettings();
+            }
+        }
+
         public bool FixedInvalidBackupId
         {
             get
@@ -414,6 +459,33 @@ namespace Duplicati.Server.Database
             }
         }
 
+        public string UpdateChannel
+        {
+            get 
+            {
+                return m_values[CONST.UPDATE_CHANNEL];
+            }
+            set
+            {
+                lock(m_connection.m_lock)
+                    m_values[CONST.UPDATE_CHANNEL] = value;
+                SaveSettings();
+            }
+        }
+
+        public string UsageReporterLevel
+        {
+            get 
+            {
+                return m_values[CONST.USAGE_REPORTER_LEVEL];
+            }
+            set
+            {
+                lock(m_connection.m_lock)
+                    m_values[CONST.USAGE_REPORTER_LEVEL] = value;
+                SaveSettings();
+            }
+        }
     }
 }
 

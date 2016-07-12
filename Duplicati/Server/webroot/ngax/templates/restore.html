@@ -1,3 +1,5 @@
+<script>$(function() { $( ".resizable" ).resizable(); });</script>
+
 <div class="restore" ng-controller="RestoreController">
     <form id="restore" class="styled">
 
@@ -17,8 +19,9 @@
                 <a href id="searchfiltersubmit" class="button" ng-click="doSearch()" ng-cancelsearch="clearSearch()" ng-enabled="!Searching">{{ Searching ? 'Busy...' : 'Search' }}</a>
             </div>
 
-            <restore-file-picker id="restore_file_picker" ng-sources="Paths" ng-backup-id="BackupID" ng-timestamp="filesetStamps[RestoreVersion + '']" treedata="treedata" ng-selected="Selected" ng-search-filter="SearchFilter" ng-search-mode="InSearchMode">
-            </restore-file-picker>
+            <div class="resizable filepicker">
+                <restore-file-picker id="restore_file_picker" ng-sources="Paths" ng-backup-id="BackupID" ng-timestamp="filesetStamps[RestoreVersion + '']" treedata="treedata" ng-selected="Selected" ng-search-filter="SearchFilter" ng-search-mode="InSearchMode"></restore-file-picker>
+            </div>
             <!-- <div ng-repeat="value in Selected" >{{value}}</div> -->
             <div class="buttons">
                 <a href class="submit" ng-click="onClickNext()">Continue</a>
@@ -55,7 +58,9 @@
                 </div>
                 
                 <label for="folder_path_picker">Folder path</label>
-                <destination-folder-picker style="float: left; width: 440px; max-height: " id="folder_path_picker" ng-model="RestorePath" ng-show-hidden="ShowHiddenFolders" ng-hide-user-node="false"></destination-folder-picker>
+                <div class="resizable filepicker" style="clear: both;">
+                    <destination-folder-picker id="folder_path_picker" ng-model="RestorePath" ng-show-hidden="ShowHiddenFolders" ng-hide-user-node="false"></destination-folder-picker>
+                </div>
             </div>
 
             <h2>How do you want to handle existing files?</h2>
@@ -87,9 +92,11 @@
         <div ng-show="restore_step == 2 &amp;&amp; connecting == false">
             <h3>
                 <div class="hint-text">Your files and folders have been restored successfully.</div>
-                <div id="restore-hint-donate" class="hint-text">Did we help save your files? If so, please consider supporting Duplicati with a donation. We suggest 10€ for private use and 100€ for commercial use.</div>
-                <div id="restore-hint-paypal" class="hint-text"><a href="https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=paypal%40hexad%2edk&item_name=Duplicati%20Donation&no_shipping=2&no_note=1&tax=0&currency_code=EUR&bn=PP%2dDonationsBF&charset=UTF%2d8&lc=US" target="blank">VISA, Mastercard, ... via Paypal</div>
-                <div id="restore-hint-bitcoin" class="hint-text"><a href="bitcoin:1L74qa1n5SFKwwyHhECTHBJgcf6WT2rJKf" target="blank">Bitcoin: 1L74qa1n5SFKwwyHhECTHBJgcf6WT2rJKf</a></div>
+                <div ng-hide="SystemInfo.SuppressDonationMessages">
+                    <div id="restore-hint-donate" class="hint-text">Did we help save your files? If so, please consider supporting Duplicati with a donation. We suggest 10€ for private use and 100€ for commercial use.</div>
+                    <div id="restore-hint-paypal" class="hint-text"><a href="https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=paypal%40hexad%2edk&item_name=Duplicati%20Donation&no_shipping=2&no_note=1&tax=0&currency_code=EUR&bn=PP%2dDonationsBF&charset=UTF%2d8&lc=US" target="blank">VISA, Mastercard, ... via Paypal</a></div>
+                    <div id="restore-hint-bitcoin" class="hint-text"><a href="bitcoin:1L74qa1n5SFKwwyHhECTHBJgcf6WT2rJKf" target="blank">Bitcoin: 1L74qa1n5SFKwwyHhECTHBJgcf6WT2rJKf</a></div>
+                </div>
             </h3>
             <div class="buttons">
                 <a href class="submit" ng-click="onClickComplete()">OK</a>

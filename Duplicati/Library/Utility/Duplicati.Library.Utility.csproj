@@ -3,8 +3,6 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{DE3E5D4C-51AB-4E5E-BEE8-E636CEBFBA65}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
@@ -39,8 +37,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
@@ -69,6 +65,8 @@
     <Compile Include="JoinedFilterExpression.cs" />
     <Compile Include="Strings.cs" />
     <Compile Include="FilterCollector.cs" />
+    <Compile Include="HashCalculatingStream.cs" />
+    <Compile Include="DirectStreamLink.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

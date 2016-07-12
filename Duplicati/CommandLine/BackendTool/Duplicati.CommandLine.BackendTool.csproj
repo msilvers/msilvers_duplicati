@@ -3,13 +3,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>8.0.30703</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{2AF960C0-357D-4D44-A3D5-8B6E89DB0F11}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>Duplicati.CommandLine.BackendTool</RootNamespace>
     <AssemblyName>Duplicati.CommandLine.BackendTool</AssemblyName>
-    <SignAssembly>true</SignAssembly>
+    <SignAssembly>false</SignAssembly>
     <AssemblyOriginatorKeyFile>..\Duplicati.snk</AssemblyOriginatorKeyFile>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <TargetFrameworkProfile />
@@ -41,9 +39,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\..\thirdparty\Json.NET\Newtonsoft.Json.dll</HintPath>
-    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
@@ -70,6 +65,10 @@
     <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
       <Project>{C03F6DFD-805A-4BE0-9338-64870ADDB4A2}</Project>
       <Name>Duplicati.Library.Backend.S3</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
+      <Project>{59C8BBC5-6E42-46FB-AB3E-6C183A82459A}</Project>
+      <Name>Duplicati.Library.Backend.SharePoint</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
       <Project>{FF2BF37C-E502-4C98-BEA0-701671DDFA08}</Project>
@@ -118,6 +117,26 @@
     <ProjectReference Include="..\..\Library\Backend\HubiC\Duplicati.Library.Backend.HubiC.csproj">
       <Project>{D60AD540-0E7D-40CE-83AE-D26E01FFE9B8}</Project>
       <Name>Duplicati.Library.Backend.HubiC</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\AmazonCloudDrive\Duplicati.Library.Backend.AmazonCloudDrive.csproj">
+      <Project>{08D7E42D-285C-4010-9881-986125FE2F3E}</Project>
+      <Name>Duplicati.Library.Backend.AmazonCloudDrive</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\Backblaze\Duplicati.Library.Backend.Backblaze.csproj">
+      <Project>{61C43D61-4368-4942-84A3-1EB623F4EF2A}</Project>
+      <Name>Duplicati.Library.Backend.Backblaze</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
+      <Project>{6643A5AE-AB38-453F-ADCE-408E35A81A83}</Project>
+      <Name>Duplicati.Library.Backend.Mega</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\Box\Duplicati.Library.Backend.Box.csproj">
+      <Project>{3FF7DD0B-5284-4BF9-97D9-1E4417FDABB2}</Project>
+      <Name>Duplicati.Library.Backend.Box</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\AlternativeFTP\Duplicati.Library.Backend.AlternativeFTP.csproj">
+      <Project>{3F47CB0C-CEE1-447F-9C26-7F8E419E3E3F}</Project>
+      <Name>Duplicati.Library.Backend.AlternativeFTP</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

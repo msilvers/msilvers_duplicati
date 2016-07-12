@@ -1,4 +1,4 @@
-backupApp.controller('EditBackupController', function ($scope, $routeParams, $location, AppService, AppUtils, SystemInfo) {
+backupApp.controller('EditBackupController', function ($scope, $routeParams, $location, $timeout, AppService, AppUtils, SystemInfo, DialogService, EditBackupService) {
 
 	$scope.SystemInfo = SystemInfo.watch($scope);
     $scope.AppUtils = AppUtils;
@@ -15,9 +15,9 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
     $scope.ExcludeLargeFiles = false;
 
     $scope.fileAttributes = [
-    	{name: 'Hidden files', value: 'hidden'}, 
-    	{name: 'System files', value: 'system'}, 
-    	{name: 'Temporary files', value: 'temporary'}
+    	{'name': 'Hidden files', 'value': 'hidden'}, 
+    	{'name': 'System files', 'value': 'system'}, 
+    	{'name': 'Temporary files', 'value': 'temporary'}
 	];
 
 	var scope = $scope;
@@ -41,7 +41,7 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 		else if ((passphrase || '') == '')
 			scope.PassphraseScore = '';
 		else
-			scope.PassphraseScore = (zxcvbn(passphrase) || {score: -1}).score;
+			scope.PassphraseScore = (zxcvbn(passphrase) || {'score': -1}).score;
 
 		scope.PassphraseScoreString = strengthMap[scope.PassphraseScore] || 'Unknown';	
 	}
@@ -52,6 +52,7 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 	$scope.generatePassphrase = function() {
 		this.Options["passphrase"] = this.RepeatPasshrase = AppUtils.generatePassphrase();
 		this.ShowPassphrase = true;
+		this.HasGeneratedPassphrase = true;
 	};
 
 	$scope.togglePassphraseVisibility = function() {
@@ -102,29 +103,41 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 
         if (dirsep == '/') {
         	if (scope.manualSourcePath.substr(0, 1) != '/' && scope.manualSourcePath.substr(0, 1) != '%') {
-        		alert("The path must be an absolute path, i.e. it must start with a forward slash '/' ");
+        		DialogService.dialog('Relative paths not allowed', "The path must be an absolute path, i.e. it must start with a forward slash '/' ");
         		return;
         	}
         }
 
+        function continuation() {
+	        scope.validatingSourcePath = true;
+
+	        AppService.post('/filesystem/validate', {path: scope.manualSourcePath}).then(function() {
+	            scope.validatingSourcePath = false;
+	            scope.Backup.Sources.push(scope.manualSourcePath);
+	            scope.manualSourcePath = null;
+	        }, function() {
+	            scope.validatingSourcePath = false;
+
+	            DialogService.dialog('Path not found', 'The path does not appear to exist, do you want to add it anyway?', ['No', 'Yes'], function(ix) {
+	            	if (ix == 1) {
+		                scope.Backup.Sources.push(scope.manualSourcePath);
+		                scope.manualSourcePath = null;
+	            	}
+	            });
+	        });
+        };
+
         if (scope.manualSourcePath.substr(scope.manualSourcePath.length - 1, 1) != dirsep) {
-        	if (!confirm("The path does not end with a '" + dirsep + "' character, which means that you include a file, not a folder.\n\nDo you want to include the specified file?" ))
-        		return;
-        }
+        	DialogService.dialog('Include a file?', "The path does not end with a '" + dirsep + "' character, which means that you include a file, not a folder.\n\nDo you want to include the specified file?", ['No', 'Yes'], function(ix) {
+        		if (ix == 1)
+        			continuation();
+        	});
+        } else {
+        	continuation();
+		}
 
-        scope.validatingSourcePath = true;
 
-        AppService.post('/filesystem/validate', {path: scope.manualSourcePath}).then(function() {
-            scope.validatingSourcePath = false;
-            scope.Backup.Sources.push(scope.manualSourcePath);
-            scope.manualSourcePath = null;
-        }, function() {
-            scope.validatingSourcePath = false;
-            if (confirm('The path does not appear to exist, do you want to add it anyway?')) {
-                scope.Backup.Sources.push(scope.manualSourcePath);
-                scope.manualSourcePath = null;
-            }
-        })
+
 
     };
 
@@ -138,6 +151,10 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 	};
 
 	$scope.save = function() {
+
+		if (!EditBackupService.preValidate($scope))
+			return false;
+
 		var result = {
 			Backup: angular.copy($scope.Backup),
 			Schedule: angular.copy($scope.Schedule)
@@ -148,18 +165,70 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 		if (!$scope.ExcludeLargeFiles)
 			delete opts['--skip-files-larger-than'];
 
-		if (($scope.ExcludeAttributes || []).length > 0) {
-			opts['--exclude-files-attributes'] = $scope.ExcludeAttributes.join(',');
-			if (opts['--exclude-files-attributes'] == '')
-				delete opts['--exclude-files-attributes'];
-		}
-
-		if ((opts['encryption-module'] || '').length == 0)
+		var encryptionEnabled = true;
+		if ((opts['encryption-module'] || '').length == 0) {
 			opts['--no-encryption'] = 'true';
+			encryptionEnabled = false;
+		}
 
 		if (!AppUtils.parse_extra_options(scope.ExtendedOptions, opts))
 			return false;
 
+		var exclattr = ($scope.ExcludeAttributes || []).concat((opts['--exclude-files-attributes'] || '').split(','));
+		var exclmap = { '': true };
+
+		// Remove duplicates
+		for (var i = exclattr.length - 1; i >= 0; i--) {
+			exclattr[i] = (exclattr[i] || '').trim();
+			var cmp = exclattr[i].toLowerCase();
+			if (exclmap[cmp])
+				exclattr.splice(i, 1);
+			else
+				exclmap[cmp] = true;
+		}
+
+		if (exclattr.length == 0)
+			delete opts['--exclude-files-attributes'];
+		else
+			opts['--exclude-files-attributes'] = exclattr.join(',')
+
+		if (($scope.Backup.Name || '').trim().length == 0) {
+			DialogService.dialog('Missing name', 'You must enter a name for the backup');
+			$scope.CurrentStep = 0;
+			return;
+		}
+
+
+		if (encryptionEnabled) {
+			if ($scope.PassphraseScore === '') {
+				DialogService.dialog('Missing passphrase', 'You must enter a passphrase or disable encryption');
+				$scope.CurrentStep = 0;
+				return;
+			}
+
+			if ($scope.PassphraseScore == 'x') {
+				DialogService.dialog('Non-matching passphrase', 'Passphrases are not matching');
+				$scope.CurrentStep = 0;
+				return;
+			}
+		}
+
+		if (($scope.Backup.TargetURL || '').trim().length == 0) {
+			DialogService.dialog('Missing destination', 'You must enter a destination where the backups are stored');
+			$scope.CurrentStep = 0;
+			return;
+		}
+
+		if ($scope.Backup.Sources == null || $scope.Backup.Sources.length == 0) {
+			DialogService.dialog('Missing sources', 'You must choose at least one source folder');
+			$scope.CurrentStep = 1;
+			return;
+		}
+
+		if ($scope.KeepType == 'time' || $scope.KeepType == '')
+			delete opts['keep-versions'];
+		if ($scope.KeepType == 'versions' || $scope.KeepType == '')
+			delete opts['keep-time'];
 
 		result.Backup.Settings = [];
 		for(var k in opts) {
@@ -189,14 +258,137 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 				Expression: filterstrings[f].substr(1)
 			});
 
+		function warnWeakPassphrase(continuation) {
+			if (encryptionEnabled && ($scope.PassphraseScore == 0 || $scope.PassphraseScore == 1 || $scope.PassphraseScore == 2)) {
+				DialogService.dialog('Weak passphrase', 'Your passphrase is easy to guess. Consider changing passphrase.', ['Cancel', 'Use weak passphrase'], function(ix) {
+					if (ix == 0)
+						$scope.CurrentStep = 0;
+					else
+						continuation();
+				});
+			}
+			else
+				continuation();
+		};
+
+		function checkForGeneratedPassphrase(continuation) {
+			if (!$scope.HasGeneratedPassphrase || !encryptionEnabled)
+				continuation();
+			else
+				DialogService.dialog('Autogenerated passphrase', 'You have generated a strong passphrase. Make sure you have made a safe copy of the passphrase, as the data cannot be recovered if you loose the passphrase.', ['Cancel', 'Yes, I have stored the passphrase safely'], function(ix) {
+					if (ix == 0)
+						$scope.CurrentStep = 0;
+					else
+					{
+						// Don't ask again
+						$scope.HasGeneratedPassphrase = false;
+						continuation();
+					}
+				});
+		};
+
+		function checkForChangedPassphrase(continuation) {
+			function findPrevOpt(key) {
+				var sets = $scope.rawddata.Backup.Settings;
+				for(var k in sets)
+					if (sets[k].Name == key)
+						return sets[k];
+
+				return null;
+			};
+
+			var previousEncryptionOpt = findPrevOpt('--no-encryption');
+			var prevPassphraseOpt = findPrevOpt('passphrase');
+			var previousEncryptionModuleOpt = findPrevOpt('encryption-module');
+
+			var prevPassphrase = prevPassphraseOpt == null ? null : prevPassphraseOpt.Value;
+			var previousEncryptionEnabled = previousEncryptionOpt == null ? true : !AppUtils.parseBoolString(previousEncryptionOpt.Value, true);
+			var previousEncryptionModule = (!previousEncryptionEnabled || previousEncryptionModuleOpt == null) ? '' : (previousEncryptionModuleOpt.Value || '');
+
+			var encryptionModule = opts['encryption-module'] || '';
+
+			if (encryptionEnabled && previousEncryptionEnabled && prevPassphrase != opts['passphrase'])
+			{
+				DialogService.dialog('Passphrase changed', 'You have changed the passphrase, which is not supported. You are encouraged to create a new backup instead.', ['Cancel', 'Yes, please break my backup!'], function(ix) {
+					if (ix == 0)
+						$scope.CurrentStep = 0;
+					else
+						continuation();
+				});				
+			}
+			else if (encryptionEnabled != previousEncryptionEnabled || encryptionModule != previousEncryptionModule)
+			{
+				DialogService.dialog('Encryption changed', 'You have changed the encryption mode. This may break stuff. You are encouraged to create a new backup instead', ['Cancel', 'Yes, I\'m brave!'], function(ix) {
+					if (ix == 1)
+						continuation();
+				});	
+			}
+			else
+				continuation();
+
+		};
+
+		function checkForDisabledEncryption(continuation) {
+			if (encryptionEnabled || $scope.Backup.TargetURL.indexOf('file://') == 0 || $scope.SystemInfo.EncryptionModules.length == 0)
+				continuation();
+			else
+				DialogService.dialog('No encryption', 'You have chosen not to encrypt the backup. Encryption is recommended for all data stored on a remote server.', ['Cancel', 'Continue without encryption'], function(ix) {
+					if (ix == 0)
+						$scope.CurrentStep = 0;
+					else
+						continuation();
+				});
+		};
+
+
 		if ($routeParams.backupid == null) {
-			AppService.post('/backups', result, {'headers': {'Content-Type': 'application/json'}}).then(function() {
-				$location.path('/');
-			}, AppUtils.connectionError);
+
+			function postDb() {
+				AppService.post('/backups', result, {'headers': {'Content-Type': 'application/json'}}).then(function() {
+					$location.path('/');
+				}, AppUtils.connectionError);								
+			};
+
+			function checkForExistingDb(continuation) {
+				AppService.post('/remoteoperation/dbpath', $scope.Backup.TargetURL, {'headers': {'Content-Type': 'application/text'}}).then(
+					function(resp) {
+						if (resp.data.Exists) {
+							DialogService.dialog('Use existing database?', 'An existing local database for the storage has been found.\nRe-using the database will allow the command-line and server instances to work on the same remote storage.\n\n Do you wish to use the existing database?', ['Cancel', 'Yes', 'No'], function(ix) {
+								if (ix == 2)
+									result.Backup.DBPath = resp.data.Path;
+
+								if (ix == 1 || ix == 2)
+									continuation();
+							});
+						}
+						else
+							continuation();
+
+					}, AppUtils.connectionError
+				);
+			};
+
+			// Chain calls
+			checkForGeneratedPassphrase(function() {
+				checkForDisabledEncryption(function() {
+					warnWeakPassphrase(function() {
+						checkForExistingDb(function() {
+							EditBackupService.postValidate($scope, postDb);
+						});
+					});
+				});
+			});
+
+
 		} else {
-			AppService.put('/backup/' + $routeParams.backupid, result, {'headers': {'Content-Type': 'application/json'}}).then(function() {
-				$location.path('/');
-			}, AppUtils.connectionError);
+
+			function putDb() {
+				AppService.put('/backup/' + $routeParams.backupid, result, {'headers': {'Content-Type': 'application/json'}}).then(function() {
+					$location.path('/');
+				}, AppUtils.connectionError);
+			};
+
+			checkForChangedPassphrase(putDb);
 		}
 	};
 
@@ -224,16 +416,60 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 		for(var ix in filters)
 			$scope.Backup.Filters.push((filters[ix].Include ? '+' : '-') + filters[ix].Expression);
 
-		$scope.ExcludeLargeFiles = $scope.Options['--skip-files-larger-than'];
-		$scope.ExcludeAttributes = ($scope.Options['--exclude-files-attributes'] || '').split(',');
+		$scope.ExcludeLargeFiles = (extopts['--skip-files-larger-than'] || '').trim().length > 0;
+		if ($scope.ExcludeLargeFiles)
+			$scope.Options['--skip-files-larger-than'] = extopts['--skip-files-larger-than'];
+
+		var exclattr = (extopts['--exclude-files-attributes'] || '').split(',');
+		var dispattr = [];
+		var dispmap = {};
+
+		for (var i = exclattr.length - 1; i >= 0; i--) {			
+			var cmp = (exclattr[i] || '').trim().toLowerCase();
+			
+			// Remove empty entries
+			if (cmp.length == 0) {
+				exclattr.splice(i, 1);
+				continue;
+			}
+
+			for (var j = scope.fileAttributes.length - 1; j >= 0; j--) {
+				if (scope.fileAttributes[j].value == cmp) {
+					// Remote duplicates
+					if (dispmap[cmp] == null) {
+						dispattr.push(scope.fileAttributes[j].value);
+						dispmap[cmp] = true;
+					}
+					exclattr.splice(i, 1);
+					break;					
+				}
+			}
+		}
+
+		$scope.ExcludeAttributes = dispattr;
+		if (exclattr.length == 0)
+			delete extopts['--exclude-files-attributes'];
+		else
+			extopts['--exclude-files-attributes'] = exclattr.join(',');
 
 		$scope.RepeatPasshrase = $scope.Options['passphrase'];
 
-		delete extopts['--skip-files-larger-than'];
-		delete extopts['--exclude-files-attributes'];
-		delete extopts['--no-encryption'];
+		$scope.KeepType = '';
+		if (($scope.Options['keep-time'] || '').trim().length != 0)
+		{
+			$scope.KeepType = 'time';
+		}
+		else if (($scope.Options['keep-versions'] || '').trim().length != 0)
+		{
+			$scope.Options['keep-versions'] = parseInt($scope.Options['keep-versions']);
+			$scope.KeepType = 'versions';
+		}
 
-		$scope.ExtendedOptions = AppUtils.serializeAdvancedOptions(extopts);
+		var delopts = ['--skip-files-larger-than', '--no-encryption']
+		for(var n in delopts)
+			delete extopts[delopts[n]];
+
+		$scope.ExtendedOptions = AppUtils.serializeAdvancedOptionsToArray(extopts);
 
 		var now = new Date();
 		if ($scope.Schedule != null) {
@@ -265,6 +501,27 @@ backupApp.controller('EditBackupController', function ($scope, $routeParams, $lo
 			};
 		}
 	}
+
+	function reloadOptionsList()
+	{
+		if ($scope.Options == null)
+			return;
+
+		var encmodule = $scope.Options['encryption-module'] || '';
+		var compmodule = $scope.Options['compression-module'] || $scope.Options['--compression-module'] || 'zip';
+		var backmodule = $scope.Backup.TargetURL || '';
+		var ix = backmodule.indexOf(':');
+		if (ix > 0)
+			backmodule = backmodule.substr(0, ix);
+
+		$scope.ExtendedOptionList = AppUtils.buildOptionList($scope.SystemInfo, encmodule, compmodule, backmodule);
+	};
+
+	$scope.$watch("Options['encryption-module']", reloadOptionsList);
+	$scope.$watch("Options['compression-module']", reloadOptionsList);
+	$scope.$watch("Options['--compression-module']", reloadOptionsList);
+	$scope.$watch("Backup.TargetURL", reloadOptionsList);
+	$scope.$on('systeminfochanged', reloadOptionsList);
 
 	if ($routeParams.backupid == null) {
 

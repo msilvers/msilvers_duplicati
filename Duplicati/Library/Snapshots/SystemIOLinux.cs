@@ -24,25 +24,20 @@ namespace Duplicati.Library.Snapshots
 {
     public struct SystemIOLinux : ISystemIO
     {
-        /// <summary>
-        /// A frequently used char-as-string
-        /// </summary>
-        private static readonly string DIR_SEP = System.IO.Path.DirectorySeparatorChar.ToString();
-
         #region ISystemIO implementation
         public void DirectoryDelete(string path)
         {
-            Directory.Delete(path);
+            Directory.Delete(NoSnapshot.NormalizePath(path));
         }
 
         public void DirectoryCreate(string path)
         {
-            Directory.CreateDirectory(path);
+            Directory.CreateDirectory(NoSnapshot.NormalizePath(path));
         }
 
         public bool DirectoryExists(string path)
         {
-            return Directory.Exists(path);
+            return Directory.Exists(NoSnapshot.NormalizePath(path));
         }
 
         public void FileDelete(string path)
@@ -97,7 +92,7 @@ namespace Duplicati.Library.Snapshots
 
         public FileAttributes GetFileAttributes(string path)
         {
-            return File.GetAttributes(path);
+            return File.GetAttributes(NoSnapshot.NormalizePath(path));
         }
 
         public void SetFileAttributes(string path, FileAttributes attributes)
@@ -112,7 +107,7 @@ namespace Duplicati.Library.Snapshots
         
         public string PathGetDirectoryName(string path)
         {
-            return Path.GetDirectoryName(path);
+            return Path.GetDirectoryName(NoSnapshot.NormalizePath(path));
         }
 
         public IEnumerable<string> EnumerateFileSystemEntries(string path)
@@ -137,22 +132,22 @@ namespace Duplicati.Library.Snapshots
 
         public void DirectorySetLastWriteTimeUtc(string path, DateTime time)
         {
-            Directory.SetLastWriteTimeUtc(path, time);
+            Directory.SetLastWriteTimeUtc(NoSnapshot.NormalizePath(path), time);
         }
 
         public void DirectorySetCreationTimeUtc(string path, DateTime time)
         {
-            Directory.SetCreationTimeUtc(path, time);
+            Directory.SetCreationTimeUtc(NoSnapshot.NormalizePath(path), time);
         }
 
         public DateTime DirectoryGetLastWriteTimeUtc(string path)
         {
-            return Directory.GetLastWriteTimeUtc(path);
+            return Directory.GetLastWriteTimeUtc(NoSnapshot.NormalizePath(path));
         }
 
         public DateTime DirectoryGetCreationTimeUtc(string path)
         {
-            return Directory.GetCreationTimeUtc(path);
+            return Directory.GetCreationTimeUtc(NoSnapshot.NormalizePath(path));
         }
 
         public void FileMove(string source, string target)
@@ -167,12 +162,12 @@ namespace Duplicati.Library.Snapshots
 
         public void DirectoryDelete(string path, bool recursive)
         {
-            Directory.Delete(path, recursive);
+            Directory.Delete(NoSnapshot.NormalizePath(path), recursive);
         }
 
         public Dictionary<string, string> GetMetadata(string file)
         {
-            var f = file.EndsWith(DIR_SEP) ? file.Substring(0, file.Length - 1) : file;
+            var f = NoSnapshot.NormalizePath(file);
             var dict = new Dictionary<string, string>();
 
             var n = UnixSupport.File.GetExtendedAttributes(f);
@@ -193,7 +188,7 @@ namespace Duplicati.Library.Snapshots
             if (data == null)
                 return;
 
-            var f = file.EndsWith(DIR_SEP) ? file.Substring(0, file.Length - 1) : file;
+            var f = NoSnapshot.NormalizePath(file);
 
             foreach(var x in data.Where(x => x.Key.StartsWith("unix-ext:")).Select(x => new KeyValuePair<string, byte[]>(x.Key.Substring("unix-ext:".Length), Convert.FromBase64String(x.Value))))
                 UnixSupport.File.SetExtendedAttribute(f, x.Key, x.Value);

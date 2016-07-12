@@ -1,11 +1,10 @@
-backupApp.controller('RestoreController', function ($rootScope, $scope, $routeParams, $location, AppService, AppUtils, SystemInfo, ServerStatus) {
+backupApp.controller('RestoreController', function ($rootScope, $scope, $routeParams, $location, AppService, AppUtils, SystemInfo, ServerStatus, DialogService) {
 
     $scope.SystemInfo = SystemInfo.watch($scope);
     $scope.AppUtils = AppUtils;
 
     $scope.restore_step = 0;
     $scope.connecting = false;
-    $scope.isTemporaryBackup = true;
     $scope.HideFolderBrowser = true;
     $scope.RestoreLocation = 'direct';
     $scope.RestoreMode = 'overwrite';
@@ -53,7 +52,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
         for(var n in $scope.Filesets) {
             var item = $scope.Filesets[n];
             item.DisplayLabel = item.Version + ': ' + AppUtils.toDisplayDateAndTime(AppUtils.parseDate(item.Time));
-            item.GroupLabel = n == 0 ? 'Latests' : createGroupLabel(AppUtils.parseDate(item.Time));
+            item.GroupLabel = n == 0 ? 'Latest' : createGroupLabel(AppUtils.parseDate(item.Time));
 
             filesetStamps[item.Version + ''] = item.Time;
         }
@@ -70,6 +69,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
 
         AppService.get('/backup/' + $scope.BackupID + '/filesets' + qp).then(
             function(resp) {
+                $scope.connecting = false;
                 $scope.Filesets = resp.data;
                 $scope.parseBackupTimesData();
                 $scope.fetchPathInformation();
@@ -82,13 +82,16 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
 
                 $scope.connecting = false;
                 $scope.ConnectionProgress = '';
-                alert('Failed to connect: ' + message);
+                DialogService.dialog('Error', 'Failed to connect: ' + message);
             }
         );
     };
 
     $scope.fetchPathInformation = function() {
         var version = $scope.RestoreVersion + '';
+
+        if ($scope.connecting)
+            return;
 
         if (inProgress[version] || $scope.restore_step != 0)
             return;
@@ -105,11 +108,11 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
             var message = resp.statusText;
             if (resp.data != null && resp.data.Message != null)
                 message = resp.data.Message;
-            alert('Failed to fetch path information: ' + message);
+            DialogService.dialog('Error', 'Failed to fetch path information: ' + message);
         };
 
         if (filesetsBuilt[version] == null) {
-            if ($scope.isTemporaryBackup && filesetsRepaired[version] == null) {
+            if ($scope.IsBackupTemporary && filesetsRepaired[version] == null) {
                 $scope.connecting = true;
                 $scope.ConnectionProgress = 'Fetching path information ...';
                 inProgress[version] = true;
@@ -135,7 +138,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
                                 }
                                 else
                                 {
-                                    alert('Failed to fetch path information: ' + resp.data.ErrorMessage);
+                                    DialogService.dialog('Error', 'Failed to fetch path information: ' + resp.data.ErrorMessage);
                                 }
 
                             }, handleError);
@@ -180,8 +183,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
     $scope.onClickNext = function() {
         var results =  $scope.Selected;
         if (results.length == 0) {
-            alert('No items to restore, please select one or more items');
-            return;
+            DialogService.dialog('No items selected', 'No items to restore, please select one or more items');
         } else {
             $scope.restore_step = 1;
         }
@@ -198,7 +200,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
     };
 
     $scope.doSearch = function() {
-        if ($scope.Searching || $scope.restore_step != 1)
+        if ($scope.Searching || $scope.restore_step != 0)
             return;
 
         if (($scope.SearchFilter || '').trim().length == 0) {
@@ -211,7 +213,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
         var version = $scope.RestoreVersion + '';
         var stamp = filesetStamps[version];
 
-        AppService.get('/backup/' + $scope.BackupID + '/files/*' + $scope.SearchFilter + '*?prefix-only=false&time=' + encodeURIComponent(stamp)).then(
+        AppService.get('/backup/' + $scope.BackupID + '/files/*' + $scope.SearchFilter + '*?prefix-only=false&time=' + encodeURIComponent(stamp) + '&filter=*' + encodeURIComponent($scope.SearchFilter) + '*').then(
             function(resp) {
                 $scope.Searching = false;
                 var searchNodes = [];
@@ -281,7 +283,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
 
                 $scope.connecting = false;
                 $scope.ConnectionProgress = '';
-                alert('Failed to connect: ' + message);
+                DialogService.dialog('Error', 'Failed to connect: ' + message);
             }
         );
     };
@@ -299,7 +301,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
 
             $scope.connecting = false;
             $scope.ConnectionProgress = '';
-            alert('Failed to connect: ' + message);
+            DialogService.dialog('Error', 'Failed to connect: ' + message);
         };
 
         var p = {
@@ -346,7 +348,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
                             }
                             else
                             {
-                                alert('Failed to build temporary database: ' + resp.data.ErrorMessage);
+                                DialogService.dialog('Error', 'Failed to build temporary database: ' + resp.data.ErrorMessage);
                                 $scope.connecting = false;
                                 $scope.ConnectionProgress = '';
                             }
@@ -377,7 +379,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
             }
             else
             {
-                alert('Failed to build restore files: ' + resp.data.ErrorMessage);
+                DialogService.dialog('Error', 'Failed to restore files: ' + resp.data.ErrorMessage);
             }
         }, function(resp) {
             var message = resp.statusText;
@@ -386,7 +388,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
 
             $scope.connecting = false;
             $scope.ConnectionProgress = '';
-            alert('Failed to connect: ' + message);
+            DialogService.dialog('Error', 'Failed to connect: ' + message);
         });
     };
 

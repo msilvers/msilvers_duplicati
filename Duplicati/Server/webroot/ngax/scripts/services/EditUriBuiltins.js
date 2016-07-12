@@ -1,10 +1,10 @@
-backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, EditUriBackendConfig, $http) {
+backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, EditUriBackendConfig, DialogService, $http) {
 
 	EditUriBackendConfig.mergeServerAndPath = function(scope) {
 		if ((scope.Server || '') != '') {
 			var p = scope.Path;
 			scope.Path = scope.Server;
-			if ((p || '') != '') 
+			if ((p || '') != '')
 				scope.Path += '/' + p;
 
 			delete scope.Server;
@@ -17,9 +17,51 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 	EditUriBackendConfig.templates['googledrive'] = 'templates/backends/oauth.html';
 	EditUriBackendConfig.templates['hubic']       = 'templates/backends/oauth.html';
 	EditUriBackendConfig.templates['onedrive']    = 'templates/backends/oauth.html';
+	EditUriBackendConfig.templates['amzcd']       = 'templates/backends/oauth.html';
 	EditUriBackendConfig.templates['openstack']   = 'templates/backends/openstack.html';
 	EditUriBackendConfig.templates['azure']       = 'templates/backends/azure.html';
 	EditUriBackendConfig.templates['gcs']         = 'templates/backends/gcs.html';
+	EditUriBackendConfig.templates['b2']          = 'templates/backends/b2.html';
+	EditUriBackendConfig.templates['mega']        = 'templates/backends/mega.html';
+	EditUriBackendConfig.templates['box']         = 'templates/backends/oauth.html';
+
+
+	EditUriBackendConfig.testers['s3'] = function(scope, callback) {
+
+		if (scope.s3_server != 's3.amazonaws.com')
+		{
+			callback();
+			return;
+		}
+
+		var dlg = null;
+
+		dlg = DialogService.dialog('Testing permissions...', 'Testing permissions ...', [], null, function() {	
+			AppService.post('/webmodule/s3-iamconfig', {'s3-operation': 'CanCreateUser', 's3-username': scope.Username, 's3-password': scope.Password}).then(function(data) {
+				dlg.dismiss();
+
+				if (data.data.Result.isroot == 'True') {
+					DialogService.dialog('User has too many permissions', 'The user has too many permissions. Do you want to create a new limited user, with only permissions to the selected path?', ['Cancel', 'No' ,'Yes'], function(ix) {
+						if (ix == 0 || ix == 1) {
+							callback();
+						} else {
+							scope.s3_directCreateIAMUser(function() {
+								scope.s3_bucket_check_name = scope.Server;
+								scope.s3_bucket_check_user = scope.Username;
+
+								callback();
+							});
+						}
+					});
+				} else {
+					callback();
+				}
+			}, function(data) { 
+				dlg.dismiss();
+				AppUtils.connectionError(data); 
+			});
+		});
+	}
 
 	// Loaders are a way for backends to request extra data from the server
 	EditUriBackendConfig.loaders['s3'] = function(scope) {
@@ -57,6 +99,41 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 				scope.s3_storageclass = '';
 		}
 
+		scope.s3_bucket_check_name = null;
+		scope.s3_bucket_check_user = null;
+
+		scope.s3_directCreateIAMUser = function(callback) {
+
+			var dlg = null;
+
+			dlg = DialogService.dialog('Creating user...', 'Creating new user with limited access ...', [], null, function() {
+				path = (scope.Server || '') + '/' + (scope.Path || '');
+
+				AppService.post('/webmodule/s3-iamconfig', {'s3-operation': 'CreateIAMUser', 's3-path': path, 's3-username': scope.Username, 's3-password': scope.Password}).then(function(data) {
+					dlg.dismiss();
+
+					scope.Username = data.data.Result.accessid;
+					scope.Password = data.data.Result.secretkey;
+
+					DialogService.dialog('Created new limited user', 'New user name is ' + data.data.Result.username + '.\nUpdated credentials to use the new limited user', ['OK'], callback);
+
+				}, function(data) { 
+					dlg.dismiss();
+					AppUtils.connectionError(data);
+				});
+			});
+		};
+
+		scope.s3_createIAMPolicy = function() {
+			EditUriBackendConfig.validaters['s3'](scope, function() {
+				path = (scope.Server || '') + '/' + (scope.Path || '');
+
+				AppService.post('/webmodule/s3-iamconfig', {'s3-operation': 'GetPolicyDoc', 's3-path': path}).then(function(data) {
+					DialogService.dialog('AWS IAM Policy', data.data.Result.doc);
+				}, AppUtils.connectionError);
+			});
+
+		};
 	};
 
 	EditUriBackendConfig.loaders['oauth-base'] = function(scope) {
@@ -77,7 +154,7 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
             var countDown = 100;
             var ft = scope.oauth_create_token;
             var left = (screen.width/2)-(w/2);
-            var top = (screen.height/2)-(h/2);                
+            var top = (screen.height/2)-(h/2);
             var wnd = window.open(url, '_blank', 'height=' + h +',width=' + w + ',menubar=0,status=0,titlebar=0,toolbar=0,left=' + left + ',top=' + top)
 
             var recheck = function() {
@@ -90,7 +167,7 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		                    	scope.oauth_in_progress = false;
                     			wnd.close();
                     		} else {
-                    			setTimeout(recheck, 3000);	
+                    			setTimeout(recheck, 3000);
                     		}
                     	},
                     	function(response) {
@@ -101,18 +178,20 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
                 	scope.oauth_in_progress = false;
                     if (wnd != null)
                         wnd.close();
-                }                  
+                }
             };
 
-            setTimeout(recheck, 6000);                
+            setTimeout(recheck, 6000);
 
             return false;
 		};
 	};
 
-	EditUriBackendConfig.loaders['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.loaders['hubic']       = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.loaders['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); },
+	EditUriBackendConfig.loaders['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.loaders['hubic']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.loaders['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.loaders['amzcd']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.loaders['box']         = function() { return this['oauth-base'].apply(this, arguments); };
 
 	EditUriBackendConfig.loaders['openstack'] = function(scope) {
 		if (scope.openstack_providers == null) {
@@ -207,9 +286,11 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		EditUriBackendConfig.mergeServerAndPath(scope);
 	};
 
-	EditUriBackendConfig.parsers['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.parsers['hubic']       = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.parsers['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); }
+	EditUriBackendConfig.parsers['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.parsers['hubic']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.parsers['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.parsers['amzcd']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.parsers['box']         = function() { return this['oauth-base'].apply(this, arguments); };
 
 	EditUriBackendConfig.parsers['openstack'] = function(scope, module, server, port, path, options) {
 		scope.openstack_server = scope.openstack_server_custom = options['--openstack-authuri'];
@@ -221,7 +302,7 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		for(var x in nukeopts)
 			delete options[nukeopts[x]];
 
-		EditUriBackendConfig.mergeServerAndPath(scope);		
+		EditUriBackendConfig.mergeServerAndPath(scope);
 	};
 
 	EditUriBackendConfig.parsers['azure'] = function(scope, module, server, port, path, options) {
@@ -241,6 +322,20 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		this['oauth-base'].apply(this, arguments);
 	};
 
+	EditUriBackendConfig.parsers['b2'] = function(scope, module, server, port, path, options) {
+		if (options['--b2-accountid'])
+			scope.Username = options['--b2-accountid'];
+		if (options['--b2-applicationkey'])
+			scope.Password = options['--b2-applicationkey'];
+
+		var nukeopts = ['--b2-accountid', '--b2-applicationkey'];
+		for(var x in nukeopts)
+			delete options[nukeopts[x]];
+	};
+
+	EditUriBackendConfig.parsers['mega'] = function(scope, module, server, port, path, options) {
+		EditUriBackendConfig.mergeServerAndPath(scope);
+	};
 
 	// Builders take the scope and produce the uri output
 	EditUriBackendConfig.builders['s3'] = function(scope) {
@@ -256,7 +351,7 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		EditUriBackendConfig.merge_in_advanced_options(scope, opts);
 
 		var url = AppUtils.format('{0}{1}://{2}/{3}{4}',
-			's3',
+			scope.Backend.Key,
 			scope.UseSSL ? 's' : '',
 			scope.Server || '',
 			scope.Path || '',
@@ -294,9 +389,11 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		return url;
 	};
 
-	EditUriBackendConfig.builders['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.builders['hubic']       = function() { return this['oauth-base'].apply(this, arguments); },
-	EditUriBackendConfig.builders['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); }
+	EditUriBackendConfig.builders['googledrive'] = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.builders['hubic']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.builders['onedrive']    = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.builders['amzcd']       = function() { return this['oauth-base'].apply(this, arguments); };
+	EditUriBackendConfig.builders['box']         = function() { return this['oauth-base'].apply(this, arguments); };
 
 
 	EditUriBackendConfig.builders['openstack'] = function(scope) {
@@ -317,7 +414,7 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		EditUriBackendConfig.merge_in_advanced_options(scope, opts);
 
 		var url = AppUtils.format('{0}://{1}{2}',
-			'openstack',
+			scope.Backend.Key,
 			scope.Path,
 			AppUtils.encodeDictAsUrl(opts)
 		);
@@ -330,8 +427,11 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 
 		EditUriBackendConfig.merge_in_advanced_options(scope, opts);
 
+		// Slightly better error message
+		scope.Folder = scope.Path;
+
 		var url = AppUtils.format('{0}://{1}{2}',
-			'azure',
+			scope.Backend.Key,
 			scope.Path,
 			AppUtils.encodeDictAsUrl(opts)
 		);
@@ -363,31 +463,83 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		);
 
 		return url;
-	};	
-
-	EditUriBackendConfig.validaters['file'] = function(scope) {
-		return EditUriBackendConfig.require_path(scope);
 	};
 
-	EditUriBackendConfig.validaters['ftp'] = function(scope) {
-		var res = 
+	EditUriBackendConfig.builders['b2'] = function(scope) {
+		var opts = { };
+
+		EditUriBackendConfig.merge_in_advanced_options(scope, opts);
+
+		// Slightly better error message
+		scope.Folder = scope.Server;
+
+		var url = AppUtils.format('{0}://{1}/{2}{3}',
+			scope.Backend.Key,
+			scope.Server || '',
+			scope.Path || '',
+			AppUtils.encodeDictAsUrl(opts)
+		);
+
+		return url;
+	};
+
+	EditUriBackendConfig.builders['mega'] = function(scope) {
+		var opts = { };
+
+		EditUriBackendConfig.merge_in_advanced_options(scope, opts);
+
+		// Slightly better error message
+		scope.Folder = scope.Path;
+
+		var url = AppUtils.format('{0}://{1}{2}',
+			scope.Backend.Key,
+			scope.Path,
+			AppUtils.encodeDictAsUrl(opts)
+		);
+
+		return url;
+	};
+
+	EditUriBackendConfig.validaters['file'] = function(scope, continuation) {
+		if (EditUriBackendConfig.require_path(scope))
+			continuation();
+	};
+
+	EditUriBackendConfig.validaters['ftp'] = function (scope, continuation) {
+	    var res =
 			EditUriBackendConfig.require_server(scope) &&
-			EditUriBackendConfig.require_field(scope, 'Username', 'username') &&
-			EditUriBackendConfig.recommend_path(scope);
+			EditUriBackendConfig.require_field(scope, 'Username', 'username');
 
-		if (res && (scope.Password || '').trim().length == 0)
-			res = EditUriBackendConfig.show_warning_dialog('It is possible to connect to some FTP without a password.\nAre you sure your FTP server supports password-less logins?');
-
-		return res;
+	    if (res)
+	        EditUriBackendConfig.recommend_path(scope, function () {
+	            if ((scope.Password || '').trim().length == 0)
+	                EditUriBackendConfig.show_warning_dialog('It is possible to connect to some FTP without a password.\nAre you sure your FTP server supports password-less logins?', continuation);
+	            else
+	                continuation();
+	        });
 	};
 
-	EditUriBackendConfig.validaters['ssh'] = function(scope) {
+	EditUriBackendConfig.validaters['aftp'] = function (scope, continuation) {
+	    var res =
+			EditUriBackendConfig.require_server(scope) &&
+			EditUriBackendConfig.require_field(scope, 'Username', 'username');
+
+	    if (res)
+	        EditUriBackendConfig.recommend_path(scope, function () {
+	            if ((scope.Password || '').trim().length == 0)
+	                EditUriBackendConfig.show_warning_dialog('It is possible to connect to some FTP without a password.\nAre you sure your FTP server supports password-less logins?', continuation);
+	            else
+	                continuation();
+	        });
+	};
+
+	EditUriBackendConfig.validaters['ssh'] = function(scope, continuation) {
 		var res =
 			EditUriBackendConfig.require_server(scope) &&
-			EditUriBackendConfig.require_username_and_password(scope) &&
-			EditUriBackendConfig.recommend_path(scope);
+			EditUriBackendConfig.require_username_and_password(scope);
 
-		return res;
+		if (res)
+			EditUriBackendConfig.recommend_path(scope, continuation);
 	};
 
 	EditUriBackendConfig.validaters['webdav'] = EditUriBackendConfig.validaters['ssh'];
@@ -395,28 +547,56 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 	EditUriBackendConfig.validaters['tahoe'] = EditUriBackendConfig.validaters['ssh'];
 
 
-	EditUriBackendConfig.validaters['onedrive'] = function(scope) {
+	EditUriBackendConfig.validaters['onedrive'] = function(scope, continuation) {
 		var res =
-			EditUriBackendConfig.require_field(scope, 'AuthID', 'AuthID') &&
-			EditUriBackendConfig.recommend_path(scope);
+			EditUriBackendConfig.require_field(scope, 'AuthID', 'AuthID');
 
-		return res;
+		if (res)
+			EditUriBackendConfig.recommend_path(scope, continuation);
 	};
 
-	EditUriBackendConfig.validaters['hubic'] = EditUriBackendConfig.validaters['onedrive'];
-	EditUriBackendConfig.validaters['googledrive'] = EditUriBackendConfig.validaters['onedrive'];
-	EditUriBackendConfig.validaters['gcs'] = EditUriBackendConfig.validaters['onedrive'];
+	EditUriBackendConfig.validaters['hubic']       = function(scope, continuation) {
 
-	EditUriBackendConfig.validaters['azure'] = function(scope) {
+		var prefix = 'HubiC-DeskBackup_Duplicati/';
+
+		EditUriBackendConfig.validaters['onedrive'](scope, function() {
+
+			var p = (scope.Path || '').trim();
+
+			if (p.length > 0 && p.indexOf('default/') != 0 && p.indexOf(prefix) != 0) {
+				DialogService.dialog('Adjust path name?', 'The path should start with "' + prefix + '" or "default", otherwise you will not be able to see the files in the HubiC web interface.\n\nDo you want to add the prefix to the path automatically?', ['Cancel', 'No', 'Yes'], function(ix) {
+					if (ix == 2) {
+						while (p.indexOf('/') == 0)
+							p = p.substr(1);
+
+						scope.Path = prefix + p;
+					}
+					if (ix == 1 || ix == 2)
+						continuation();
+				});
+			} else {
+				continuation();
+			}
+		});
+
+	};
+
+	EditUriBackendConfig.validaters['googledrive'] = EditUriBackendConfig.validaters['onedrive'];
+	EditUriBackendConfig.validaters['gcs']         = EditUriBackendConfig.validaters['onedrive'];
+	EditUriBackendConfig.validaters['amzcd']       = EditUriBackendConfig.validaters['onedrive'];
+	EditUriBackendConfig.validaters['box']         = EditUriBackendConfig.validaters['onedrive'];
+
+	EditUriBackendConfig.validaters['azure'] = function(scope, continuation) {
 		var res =
 			EditUriBackendConfig.require_field(scope, 'Username', 'Account name') &&
 			EditUriBackendConfig.require_field(scope, 'Password', 'Access Key') &&
 			EditUriBackendConfig.require_field(scope, 'Path', 'Container name');
 
-		return res;
+		if (res)
+			continuation();
 	};
 
-	EditUriBackendConfig.validaters['openstack'] = function(scope) {
+	EditUriBackendConfig.validaters['openstack'] = function(scope, continuation) {
 		var res =
 			EditUriBackendConfig.require_field(scope, 'Username', 'username') &&
 			EditUriBackendConfig.require_field(scope, 'Path', 'bucket name');
@@ -437,10 +617,11 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 				res = EditUriBackendConfig.show_error_dialog('You must enter either a password or an API Key, not both');
 		}
 
-		return res;
+		if (res)
+			continuation();
 	};
 
-	EditUriBackendConfig.validaters['s3'] = function(scope) {
+	EditUriBackendConfig.validaters['s3'] = function(scope, continuation) {
 		var res =
 			EditUriBackendConfig.require_field(scope, 'Server', 'bucket name') &&
 			EditUriBackendConfig.require_field(scope, 'Username', 'AWS Access ID') &&
@@ -449,21 +630,63 @@ backupApp.service('EditUriBuiltins', function(AppService, AppUtils, SystemInfo, 
 		if (res && (scope['s3_server'] || '').trim().length == 0 && (scope['s3_server_custom'] || '').trim().length == 0)
 			res = EditUriBackendConfig.show_error_dialog('You must select or fill in the server');
 
-		if (res && scope.Server.toLowerCase() != scope.Server) {
-			if (EditUriBackendConfig.show_warning_dialog('The bucket name should be all lower-case, convert automatically?'))
-				scope.Server = scope.Server.toLowerCase();
-			else
-				res = false;
-		}
 
-		if (res && scope.Server.toLowerCase().indexOf(scope.Username.toLowerCase()) != 0) {
-			if (EditUriBackendConfig.show_warning_dialog('The bucket name should start with your username, prepend automatically?'))
-				scope.Server = scope.Username.toLowerCase() + '-' + scope.Server;
-		}
+		if (res) {
 
-		return res;
+			function checkUsernamePrefix() {
+				if (scope.Server.toLowerCase().indexOf(scope.Username.toLowerCase()) != 0 && (scope.s3_bucket_check_name != scope.Server || scope.s3_bucket_check_user != scope.Username)) {
+					DialogService.dialog('Adjust bucket name?', 'The bucket name should start with your username, prepend automatically?', ['Cancel', 'No', 'Yes'], function(ix) {
+						if (ix == 2)
+							scope.Server = scope.Username.toLowerCase() + '-' + scope.Server;
+						if (ix == 1 || ix == 2)
+						{
+							scope.s3_bucket_check_name = scope.Server;
+							scope.s3_bucket_check_user = scope.Username;
+							continuation();
+						}
+					});
+				} else {
+					continuation();
+				}
+			}
+
+			function checkLowerCase() {
+				if (scope.Server.toLowerCase() != scope.Server) {
+					DialogService.dialog('Adjust bucket name?', 'The bucket name should be all lower-case, convert automatically?', ['Cancel', 'No', 'Yes'], function(ix) {
+						if (ix == 2)
+							scope.Server = scope.Server.toLowerCase();
+
+						if (ix == 1 || ix == 2)
+							checkUsernamePrefix();
+					});
+				} else {
+					checkUsernamePrefix();
+				}
+			};
+
+			checkLowerCase();
+		}
 	};
 
+	EditUriBackendConfig.validaters['b2'] = function(scope, continuation) {
+		var res =
+			EditUriBackendConfig.require_field(scope, 'Server', 'bucket name') &&
+			EditUriBackendConfig.require_field(scope, 'Username', 'B2 Cloud Storage Account ID') &&
+			EditUriBackendConfig.require_field(scope, 'Password', 'B2 Cloud Storage Application Key');
+
+		if (res)
+			continuation();
+	};
+
+	EditUriBackendConfig.validaters['mega'] = function(scope, continuation) {
+		scope.Path = scope.Path || '';
+		var res =
+			EditUriBackendConfig.require_field(scope, 'Username', 'Username') &&
+			EditUriBackendConfig.require_field(scope, 'Password', 'Password');
+
+		if (res)
+			continuation();
+	};
 
 
 });

@@ -1,4 +1,4 @@
-backupApp.service('ServerStatus', function($http, $rootScope, $timeout, AppService, AppUtils) {
+backupApp.service('ServerStatus', function($rootScope, $timeout, AppService, AppUtils) {
 
     var longpolltime = 5 * 60 * 1000;
 
@@ -16,7 +16,13 @@ backupApp.service('ServerStatus', function($http, $rootScope, $timeout, AppServi
         xsfrerror: false,
         connectionAttemptTimer: 0,
         failedConnectionAttempts: 0,
-        lastPgEvent: null
+        lastPgEvent: null,
+        updaterState: 'Waiting',
+        updatedVersion: null,
+        updateReady: false,
+        updateDownloadProgress: 0,
+        proposedSchedule: [],
+        schedulerQueueIds: []
     };
 
     this.state = state;
@@ -31,7 +37,7 @@ backupApp.service('ServerStatus', function($http, $rootScope, $timeout, AppServi
         'Backup_WaitForUpload': 'Waiting for upload ...',
         'Backup_Delete': 'Deleting unwanted files ...',
         'Backup_Compact': 'Compacting remote data ...',
-        'Backup_VerificationUpload': 'Uploadind verification file ...',
+        'Backup_VerificationUpload': 'Uploading verification file ...',
         'Backup_PostBackupVerify': 'Verifying backend data ...',
         'Backup_Complete': 'Finished!',
         'Restore_Begin': 'Starting ...',
@@ -48,6 +54,7 @@ backupApp.service('ServerStatus', function($http, $rootScope, $timeout, AppServi
         'Recreate_Running': 'Recreating database ...',
         'Repair_Running': 'Reparing ...',
         'Verify_Running': 'Verifying ...',
+        'BugReport_Running': 'Creating bug report ...',
         'Error': 'Error!'
     };
 
@@ -189,14 +196,33 @@ backupApp.service('ServerStatus', function($http, $rootScope, $timeout, AppServi
         var url = '/serverstate/?lasteventid=' + parseInt(state.lastEventId) + '&longpoll=' + (state.lastEventId > 0 ? 'true' : 'false') + '&duration=' + parseInt((longpolltime-1000) / 1000) + 's';
         AppService.get(url, {timeout: state.lastEventId > 0 ? longpolltime : 5000}).then(
             function (response) {
-                var oldEventId = state.lastEventId;
+                var oldEventId = state.lastEventId;                
                 var anychanged =
                     notifyIfChanged(response.data, 'LastEventID', 'lastEventId') |
                     notifyIfChanged(response.data, 'LastDataUpdateID', 'lastDataUpdateId') |
                     notifyIfChanged(response.data, 'LastNotificationUpdateID', 'lastNotificationUpdateId') |
                     notifyIfChanged(response.data, 'ActiveTask', 'activeTask') |
                     notifyIfChanged(response.data, 'ProgramState', 'programState') |
-                    notifyIfChanged(response.data, 'EstimatedPauseEnd', 'estimatedPauseEnd');
+                    notifyIfChanged(response.data, 'EstimatedPauseEnd', 'estimatedPauseEnd')
+                    notifyIfChanged(response.data, 'UpdaterState', 'updaterState') |
+                    notifyIfChanged(response.data, 'UpdateReady', 'updateReady') |
+                    notifyIfChanged(response.data, 'UpdatedVersion', 'updatedVersion')|
+                    notifyIfChanged(response.data, 'UpdateDownloadProgress', 'updateDownloadProgress');
+
+
+                if (!angular.equals(state.proposedSchedule, response.data.ProposedSchedule)) {
+                    state.proposedSchedule.length = 0;
+                    state.proposedSchedule.push.apply(state.proposedSchedule, response.data.ProposedSchedule);
+                    $rootScope.$broadcast('serverstatechanged.proposedSchedule', state.proposedSchedule);
+                    anychanged = true;
+                }
+
+                if (!angular.equals(state.schedulerQueueIds, response.data.SchedulerQueueIds)) {
+                    state.schedulerQueueIds.length = 0;
+                    state.schedulerQueueIds.push.apply(state.schedulerQueueIds, response.data.SchedulerQueueIds);
+                    $rootScope.$broadcast('serverstatechanged.schedulerQueueIds', state.schedulerQueueIds);
+                    anychanged = true;
+                }
 
                 // Clear error indicators
                 state.failedConnectionAttempts = 0;

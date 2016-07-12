@@ -49,14 +49,20 @@ namespace Duplicati.UnitTest
         }
 
         [Test]
-        public void RunCommands()
+		[Category("BulkData")]
+		public void RunCommands()
         {
+            if (Directory.Exists(DATAFOLDER))
+                PrepareSourceData();
             DoRunCommands(TARGETFOLDER);
         }
 
         [Test]
-        public void RunCommandsWithoutSize()
+		[Category("BulkData")]
+		public void RunCommandsWithoutSize()
         {
+            if (Directory.Exists(DATAFOLDER))
+                PrepareSourceData();
             DoRunCommands(new SizeOmittingBackend().ProtocolKey + "://" + TARGETFOLDER);
         }
 

@@ -21,7 +21,7 @@ using Duplicati.Library.Interface;
 
 namespace Duplicati.Server.WebServer.RESTMethods
 {
-    public class SystemInfo : IRESTMethodGET, IRESTMethodDocumented
+    public class SystemInfo : IRESTMethodGET, IRESTMethodPOST, IRESTMethodDocumented
     {
         public string Description { get { return "Gets various system properties"; } }
         public IEnumerable<KeyValuePair<string, Type>> Types
@@ -39,6 +39,27 @@ namespace Duplicati.Server.WebServer.RESTMethods
             info.BodyWriter.OutputOK(SystemData);            
         }
 
+        public void POST(string key, RequestInfo info)
+        {
+            var input = info.Request.Form;
+            switch ((key ?? "").ToLowerInvariant())
+            {
+                case "suppressdonationmessages":
+                    Library.Main.Utility.SuppressDonationMessages = true;
+                    info.OutputOK();
+                    return;
+
+                case "showdonationmessages":
+                    Library.Main.Utility.SuppressDonationMessages = false;
+                    info.OutputOK();
+                    return;
+
+                default:
+                    info.ReportClientError("No such action", System.Net.HttpStatusCode.NotFound);
+                    return;
+            }
+        }
+
         private static object SystemData
         {
             get
@@ -49,6 +70,10 @@ namespace Duplicati.Server.WebServer.RESTMethods
                     PasswordPlaceholder = Duplicati.Server.WebServer.Server.PASSWORD_PLACEHOLDER,
                     ServerVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(),
                     ServerVersionName = Duplicati.License.VersionNumbers.Version,
+                    ServerVersionType = Duplicati.Library.AutoUpdater.UpdaterManager.SelfVersion.ReleaseType,
+                    BaseVersionName = Duplicati.Library.AutoUpdater.UpdaterManager.BaseVersion.Displayname,
+                    DefaultUpdateChannel = Duplicati.Library.AutoUpdater.AutoUpdateSettings.DefaultUpdateChannel,
+                    DefaultUsageReportLevel = Duplicati.Library.UsageReporter.Reporter.DefaultReportLevel,
                     ServerTime = DateTime.Now,
                     OSType = Library.Utility.Utility.IsClientLinux ? (Library.Utility.Utility.IsClientOSX ? "OSX" : "Linux") : "Windows",
                     DirectorySeparator = System.IO.Path.DirectorySeparatorChar,
@@ -73,7 +98,8 @@ namespace Duplicati.Server.WebServer.RESTMethods
                     WebModules = Serializable.ServerSettings.WebModules,
                     ConnectionModules = Serializable.ServerSettings.ConnectionModules,
                     UsingAlternateUpdateURLs = Duplicati.Library.AutoUpdater.AutoUpdateSettings.UsesAlternateURLs,
-                    LogLevels = Enum.GetNames(typeof(Duplicati.Library.Logging.LogMessageType))
+                    LogLevels = Enum.GetNames(typeof(Duplicati.Library.Logging.LogMessageType)),
+                    SuppressDonationMessages = Duplicati.Library.Main.Utility.SuppressDonationMessages
                 };
             }
         }

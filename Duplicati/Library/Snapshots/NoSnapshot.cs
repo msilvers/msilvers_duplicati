@@ -38,11 +38,6 @@ namespace Duplicati.Library.Snapshots
         protected string[] m_sources;
 
         /// <summary>
-        /// A frequently used char-as-string
-        /// </summary>
-        protected readonly string DIR_SEP = System.IO.Path.DirectorySeparatorChar.ToString();
-
-        /// <summary>
         /// Constructs a new backup snapshot, using all the required disks
         /// </summary>
         /// <param name="sourcepaths">The folders that are about to be backed up</param>
@@ -64,6 +59,19 @@ namespace Duplicati.Library.Snapshots
         }
 
         #region Private Methods
+        /// <summary>
+        /// Normalizes a path before calling system methods
+        /// </summary>
+        /// <returns>The path to normalize.</returns>
+        /// <param name="path">The normalized path.</param>
+        public static string NormalizePath(string path)
+        {
+            var p = System.IO.Path.GetFullPath(path);
+
+            // This should not be required, but some versions of Mono apperently do not strip the trailing slash
+            return (p.Length > 1 && p[p.Length - 1] == System.IO.Path.DirectorySeparatorChar) ? p.Substring(0, p.Length - 1) : p;
+        }
+
         /// <summary>
         /// Lists all folders in the given folder
         /// </summary>
@@ -160,10 +168,7 @@ namespace Duplicati.Library.Snapshots
         /// <param name="file">The file or folder to examine</param>
         public virtual System.IO.FileAttributes GetAttributes(string file)
         {
-            if (file.EndsWith(DIR_SEP))
-                return System.IO.File.GetAttributes(file.Substring(0, file.Length - 1));
-            else
-                return System.IO.File.GetAttributes(file);
+            return System.IO.File.GetAttributes(NormalizePath(file));
         }
         
         /// <summary>

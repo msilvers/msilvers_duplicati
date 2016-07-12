@@ -57,21 +57,6 @@ namespace Duplicati.Library
                 throw new Exception(Strings.OAuthHelper.MissingAuthID(OAuthLoginUrl));
         }
 
-        public T GetJSONData<T>(string url, Action<HttpWebRequest> setup = null, Action<AsyncHttpRequest> setupreq = null)
-        {
-            var req = CreateRequest(url);
-
-            if (setup != null)
-                setup(req);
-
-            var areq = new AsyncHttpRequest(req);
-
-            if (setupreq != null)
-                setupreq(areq);
-
-            return ReadJSONResponse<T>(areq);
-        }
-
         public T GetTokenResponse<T>()
         {
             var req = CreateRequest(OAUTH_SERVER);
@@ -104,11 +89,14 @@ namespace Duplicati.Library
                             var res = GetTokenResponse<OAuth_Service_Response>();
 
                             m_tokenExpires = DateTime.UtcNow.AddSeconds(res.expires - 30);
+                            if (!string.IsNullOrWhiteSpace(res.v2_authid))
+                                m_authid = res.v2_authid;
                             return m_token = res.access_token;
                         }
                         catch (Exception ex)
                         {
                             var msg = ex.Message;
+                            var clienterror = false;
                             if (ex is WebException)
                             {
                                 var resp = ((WebException)ex).Response as HttpWebResponse;
@@ -125,10 +113,13 @@ namespace Duplicati.Library
                                         else
                                             throw new Exception(Strings.OAuthHelper.AuthorizationFailure(msg, OAuthLoginUrl), ex);
                                     }
+
+                                    //Fail faster on client errors
+                                    clienterror = (int)resp.StatusCode >= 400 && (int)resp.StatusCode <= 499;
                                 }
                             }
 
-                            if (retries >= 5)
+                            if (retries >= (clienterror ? 1 : 5))
                                 throw new Exception(Strings.OAuthHelper.AuthorizationFailure(msg, OAuthLoginUrl), ex);
 
                             System.Threading.Thread.Sleep(TimeSpan.FromSeconds(Math.Pow(2, retries)));
@@ -148,6 +139,9 @@ namespace Duplicati.Library
             public string access_token { get; set; }
             [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
             public int expires { get; set; }
+            [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+            public string v2_authid { get; set; }
+
         }
 
     }

@@ -40,7 +40,7 @@ $(document).ready(function() {
         decode_uri: function(url) {
             var dict = EDIT_URI.decode_uri(url);
             if (dict == null || dict['backend-type'] == null) {
-                
+
                 dict = dict || {};
 
                 var p = url;
@@ -76,7 +76,7 @@ $(document).ready(function() {
                 $.browseForFolder({
                     title: 'Select target folder',
                     multiSelect: false,
-                    resolvePath: true,            
+                    resolvePath: true,
                     callback: function(path, display) {
                         $('#server-path').val(path);
                     }
@@ -110,6 +110,12 @@ $(document).ready(function() {
     }
 
     APP_DATA.plugins.backend['ftp'] = {
+        defaultport: 21,
+        defaultportssl: 443,
+        optionalpassword: true
+    }
+
+    APP_DATA.plugins.backend['aftp'] = {
         defaultport: 21,
         defaultportssl: 443,
         optionalpassword: true
@@ -184,7 +190,7 @@ $(document).ready(function() {
                 var h = 550;
 
                 var left = (screen.width/2)-(w/2);
-                var top = (screen.height/2)-(h/2);                
+                var top = (screen.height/2)-(h/2);
                 var wnd = window.open(url, '_blank', 'height=' + h +',width=' + w + ',menubar=0,status=0,titlebar=0,toolbar=0,left=' + left + ',top=' + top)
 
                 var recheck = function() {
@@ -209,7 +215,7 @@ $(document).ready(function() {
                     } else {
                         if (wnd != null)
                             wnd.close();
-                    }                  
+                    }
                 };
 
                 setTimeout(recheck, 6000);
@@ -225,6 +231,8 @@ $(document).ready(function() {
 
     APP_DATA.plugins.backend['googledrive'] = APP_DATA.plugins.backend['onedrive'];
     APP_DATA.plugins.backend['hubic'] = APP_DATA.plugins.backend['onedrive'];
+    APP_DATA.plugins.backend['amzcd'] = APP_DATA.plugins.backend['onedrive'];
+    APP_DATA.plugins.backend['box'] = APP_DATA.plugins.backend['onedrive'];
 
     APP_DATA.plugins.backend['s3'] = {
 
@@ -238,7 +246,7 @@ $(document).ready(function() {
         passwordwatermark: 'AWS Secret Key',
         serverdrop_field: null,
         regiondrop_field: null,
-        storageclassdrop_field: null,        
+        storageclassdrop_field: null,
         bucket_field: null,
 
         known_hosts: null,
@@ -254,10 +262,10 @@ $(document).ready(function() {
 
                 this.serverdrop_field.autocomplete({
                     minLength: 0,
-                    source: servers, 
+                    source: servers,
                 });
                 var self = this;
-                this.serverdrop_field.click(function() {  
+                this.serverdrop_field.click(function() {
                     self.serverdrop_field.autocomplete('search', '');
                 });
             }
@@ -268,13 +276,13 @@ $(document).ready(function() {
                 var buckets = [];
                 for (var k in this.known_regions)
                     buckets.push({label: k + ' (' + this.known_regions[k] + ')', value: this.known_regions[k]});
-                
+
                 this.regiondrop_field.autocomplete({
                     minLength: 0,
-                    source: buckets, 
+                    source: buckets,
                 });
                 var self = this;
-                this.regiondrop_field.click(function() {  
+                this.regiondrop_field.click(function() {
                     self.regiondrop_field.autocomplete('search', '');
                 });
             }
@@ -285,13 +293,13 @@ $(document).ready(function() {
                 var buckets = [];
                 for (var k in this.known_storage_classes)
                     buckets.push({label: k + ' (' + this.known_storage_classes[k] + ')', value: this.known_storage_classes[k]});
-                
+
                 this.storageclassdrop_field.autocomplete({
                     minLength: 0,
-                    source: buckets, 
+                    source: buckets,
                 });
                 var self = this;
-                this.storageclassdrop_field.click(function() {  
+                this.storageclassdrop_field.click(function() {
                     self.storageclassdrop_field.autocomplete('search', '');
                 });
             }
@@ -339,7 +347,7 @@ $(document).ready(function() {
                 });
             } else {
                 this.setup_regions_after_config();
-            }            
+            }
 
             if (self.known_storage_classes == null) {
                 APP_DATA.callServer({action: 'send-command', command: 's3-getconfig', 's3-config': 'StorageClasses'}, function(data) {
@@ -351,7 +359,7 @@ $(document).ready(function() {
                 });
             } else {
                 this.setup_storage_classes_after_config();
-            }            
+            }
 
         },
 
@@ -484,10 +492,10 @@ $(document).ready(function() {
 
                 this.locationdrop_field.autocomplete({
                     minLength: 0,
-                    source: servers, 
+                    source: servers,
                 });
                 var self = this;
-                this.locationdrop_field.click(function() {  
+                this.locationdrop_field.click(function() {
                     self.locationdrop_field.autocomplete('search', '');
                 });
             }
@@ -502,10 +510,10 @@ $(document).ready(function() {
 
                 this.storage_class_field.autocomplete({
                     minLength: 0,
-                    source: servers, 
+                    source: servers,
                 });
                 var self = this;
-                this.storage_class_field.click(function() {  
+                this.storage_class_field.click(function() {
                     self.storage_class_field.autocomplete('search', '');
                 });
             }
@@ -554,7 +562,7 @@ $(document).ready(function() {
                 });
             } else {
                 this.setup_storage_classes_after_config();
-            } 
+            }
         },
 
         cleanup_gcs: function() {
@@ -618,10 +626,10 @@ $(document).ready(function() {
 
                 this.serverdrop_field.autocomplete({
                     minLength: 0,
-                    source: servers, 
+                    source: servers,
                 });
                 var self = this;
-                this.serverdrop_field.click(function() {  
+                this.serverdrop_field.click(function() {
                     self.serverdrop_field.autocomplete('search', '');
                 });
             }
@@ -709,6 +717,121 @@ $(document).ready(function() {
             'openstack-apikey': '--openstack-apikey',
             'openstack-region': '--openstack-region'
         }
-    }    
+    }
 
+    APP_DATA.plugins.backend['b2'] = {
+
+        PLUGIN_B2_LINK: 'https://www.backblaze.com/b2/cloud-storage.html',
+
+        hasssl: false,
+        hideserverandport: true,
+        usernamelabel: 'B2 Account ID',
+        passwordlabel: 'B2 Application Key',
+        usernamewatermark: 'B2 Cloud Storage Account ID',
+        passwordwatermark: 'B2 Cloud Storage Application Key',
+
+        setup: function(dlg, div) {
+            var self = this;
+
+            $('#server-path-label').hide();
+            $('#server-path').hide();
+
+            var bucketfield = EDIT_URI.createFieldset({label: 'B2 Bucket name', name: 'b2-bucket', after: $('#server-username-and-password'), title: 'Use / to access subfolders in the bucket', watermark: 'Enter bucket name'});
+            var signuplink = EDIT_URI.createFieldset({'label': '&nbsp;', href: this.PLUGIN_B2_LINK, type: 'link', before: bucketfield.outer, 'title': 'Click here for the sign up page'});
+
+            signuplink.outer.css('margin-bottom', '10px');
+
+            this.bucket_field = bucketfield.field;
+        },
+
+        cleanup: function(dlg, div) {
+            $('#server-path-label').show();
+            $('#server-path').show();
+            this.bucket_field = null;
+        },
+
+        validate: function(dlg, values) {
+            if (!EDIT_URI.validate_input(values, true))
+                return;
+
+            if (values['server-path'] == '')
+                return EDIT_URI.validation_error(this.bucket_field, 'You must enter a B2 bucket name');
+
+            return true;
+        },
+
+        fill_form_map: {
+            'server-path': 'b2-bucket'
+        },
+
+        fill_dict_map: {
+            'b2-bucket': 'server-path'
+        }
+    }
+
+    APP_DATA.plugins.backend['mega'] = {
+
+        PLUGIN_MEGA_LINK: 'https://mega.co.nz',
+
+        hasssl: false,
+        hideserverandport: true,
+        usernamelabel: 'Username',
+        passwordlabel: 'Password',
+        usernamewatermark: 'Username',
+        passwordwatermark: 'Password',
+        path_field: null,
+
+        setup: function (dlg, div) {
+            $('#server-path-label').hide();
+            $('#server-path').hide();
+
+            $('#server-username').attr('placeholder', this.usernamewatermark);
+            $('#server-password').attr('placeholder', this.passwordwatermark);
+
+            var pathfield = EDIT_URI.createFieldset({ label: 'Path', name: 'mega-path', after: $('#server-username-and-password'), title: 'Path', watermark: 'Enter path' });
+            this.path_field = pathfield.field;
+
+            var signuplink = EDIT_URI.createFieldset({ 'label': '&nbsp;', href: this.PLUGIN_MEGA_LINK, type: 'link', before: $('#server-options-label'), 'title': 'Click here to sign in or register' });
+            signuplink.outer.css('margin-bottom', '10px');
+
+        },
+
+        cleanup: function (dlg, div) {
+            $('#server-path-label').show();
+            $('#server-path').show();
+            this.path_field = null;
+        },
+
+        validate: function (dlg, values) {
+            if (!EDIT_URI.validate_input(values, true))
+                return false;
+
+            values['server-path'] = values["mega-path"].toLowerCase();
+            this.path_field.val(values['server-path']);
+
+            return true;
+        },
+
+        fill_form_map: {
+            'server-path': function(dict, key, el, cfgel) {
+                var p = [];
+                if (dict['server-name'] && dict['server-name'] != '')
+                    p.push(dict['server-name']);
+                if (dict['server-path'] && dict['server-path'] != '')
+                    p.push(dict['server-path']);
+
+                p = p.join('/');
+
+                $('#mega-path').val(p);
+            }
+        },
+
+        fill_dict_map: {
+            'mega-path': function(dict, key, el, cfgel) {
+                var p =  $(el).val();
+                dict['server-path'] = p;
+                dict['server-name'] = '';
+            }
+        }
+    }
 });

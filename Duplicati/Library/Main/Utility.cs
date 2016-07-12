@@ -49,9 +49,9 @@ namespace Duplicati.Library.Main
                 m_values = values;
                 var hasher = System.Security.Cryptography.HashAlgorithm.Create(options.BlockHashAlgorithm);
                 if (hasher == null)
-                    throw new Exception(Strings.Foresthash.InvalidHashAlgorithm(options.BlockHashAlgorithm));
+                    throw new Exception(Strings.Common.InvalidHashAlgorithm(options.BlockHashAlgorithm));
                 if (!hasher.CanReuseTransform)
-                    throw new Exception(Strings.Foresthash.InvalidCryptoSystem(options.BlockHashAlgorithm));
+                    throw new Exception(Strings.Common.InvalidCryptoSystem(options.BlockHashAlgorithm));
                     
                 using (var ms = new System.IO.MemoryStream())
                 using (var w = new StreamWriter(ms, Encoding.UTF8))
@@ -165,15 +165,72 @@ namespace Duplicati.Library.Main
                         throw new Exception(string.Format("Unsupported change of parameter \"{0}\" from \"{1}\" to \"{2}\"", k.Key, opts[k.Key], k.Value));
                     
                 }
-                    
-        
+                            
             //Extra sanity check
             if (db.GetBlocksLargerThan(options.Blocksize) > 0)
                 throw new Exception("Unsupported block-size change detected");
         
             if (needsUpdate)
+            {
+                // Make sure we do not loose values
+                foreach(var k in opts)
+                    if (!newDict.ContainsKey(k.Key))
+                        newDict[k.Key] = k.Value;
+                
                 db.SetDbOptions(newDict, transaction);               
-        }    
+            }
+        }
+
+        /// <summary>
+        /// The filename for the marker file that the user can add to suppress donation messages
+        /// </summary>
+        private const string SUPPRESS_DONATIONS_FILENAME = "suppress_donation_messages.txt";
+
+
+        /// <summary>
+        /// Gets or sets donation message suppression
+        /// </summary>
+        public static bool SuppressDonationMessages
+        {
+            get
+            {
+                try
+                {
+                    var folder = Path.Combine(System.Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AutoUpdater.AutoUpdateSettings.AppName);
+                    if (!Directory.Exists(folder))
+                        Directory.CreateDirectory(folder);
+                    
+                    return File.Exists(Path.Combine(folder, SUPPRESS_DONATIONS_FILENAME));
+                }
+                catch
+                {
+                }
+
+                return true;
+            }
+            set
+            {
+                try
+                {
+                    var folder = Path.Combine(System.Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), AutoUpdater.AutoUpdateSettings.AppName);
+                    if (!Directory.Exists(folder))
+                        Directory.CreateDirectory(folder);
+
+                    var path = Path.Combine(folder, SUPPRESS_DONATIONS_FILENAME);
+
+                    if (value)
+                        using(File.OpenWrite(path))
+                        {
+                        }
+                    else
+                        File.Delete(path);
+                        
+                }
+                catch
+                {
+                }
+            }
+        }
     }
 }
 

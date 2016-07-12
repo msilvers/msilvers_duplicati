@@ -684,6 +684,9 @@ namespace Duplicati.Library.Utility
         {
             get
             {
+                // Sadly, Mono returns Unix when running on OSX
+                //return Environment.OSVersion.Platform == PlatformID.MacOSX;
+
                 if (!IsClientLinux)
                     return false;
         
@@ -744,17 +747,20 @@ namespace Duplicati.Library.Utility
         {
             get
             {
-#if __MonoCS__
-                if (Environment.OSVersion.Platform == PlatformID.Unix || (int)Environment.OSVersion.Platform == 6)
-                    return true;
-#else
-        if (Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX)
-			return true;
-#endif
-                return false;
-		
+                return Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX;
             }
         }
+
+		/// <summary>
+		/// Gets a value indicating if the client is Windows based
+		/// </summary>
+		public static bool IsClientWindows
+		{
+			get
+			{
+				return !IsClientLinux;
+			}
+		}
 
         /// <value>
         /// Returns a value indicating if the filesystem, is case sensitive 
@@ -901,7 +907,7 @@ namespace Duplicati.Library.Utility
         /// <summary>
         /// The path to the users home directory
         /// </summary>
-        private static readonly string HOME_PATH = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+        private static readonly string HOME_PATH = Environment.GetFolderPath(IsClientLinux ? Environment.SpecialFolder.Personal : Environment.SpecialFolder.UserProfile);
 
         /// <summary>
         /// Expands environment variables, including the tilde character
@@ -928,8 +934,12 @@ namespace Duplicati.Library.Utility
         /// </summary>
         /// <returns>The expanded string.</returns>
         /// <param name="str">The string to expand.</param>
-        public static string ExpandEnvironmentVariablesRegexp(string str)
+        /// <param name="lookup">A lookup method that converts an environment key to an expanded string</param>
+        public static string ExpandEnvironmentVariablesRegexp(string str, Func<string, string> lookup = null)
         {
+            if (lookup == null)
+                lookup = x => Environment.GetEnvironmentVariable(x);
+
             return
 
                 // TODO: Should we switch to using the native format, instead of following the Windows scheme?
@@ -937,7 +947,7 @@ namespace Duplicati.Library.Utility
 
                 ENVIRONMENT_VARIABLE_MATCHER_WINDOWS
                     .Replace(str.Replace("~", Regex.Escape(HOME_PATH)), (m) => 
-                        Regex.Escape(Environment.GetEnvironmentVariable(m.Groups["name"].Value)));
+                        Regex.Escape(lookup(m.Groups["name"].Value)));
         }
 
         /// <summary>

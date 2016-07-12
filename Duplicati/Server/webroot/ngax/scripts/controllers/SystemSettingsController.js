@@ -1,4 +1,14 @@
-backupApp.controller('SystemSettingsController', function($scope, $location, AppService, AppUtils, Localization) {
+backupApp.controller('SystemSettingsController', function($scope, $location, AppService, AppUtils, Localization, SystemInfo) {
+
+    $scope.SystemInfo = SystemInfo.watch($scope);
+
+    function reloadOptionsList() {
+        $scope.advancedOptionList = AppUtils.buildOptionList($scope.SystemInfo, false, false, false);
+    };
+
+    reloadOptionsList();
+
+    $scope.$on('systeminfochanged', reloadOptionsList);
 
     AppService.get('/serversettings').then(function(data) {
 
@@ -9,7 +19,11 @@ backupApp.controller('SystemSettingsController', function($scope, $location, App
         $scope.allowRemoteAccess = data.data['server-listen-interface'] != 'loopback';
         $scope.startupDelayDurationValue = data.data['startup-delay'].substr(0, data.data['startup-delay'].length - 1);
         $scope.startupDelayDurationMultiplier = data.data['startup-delay'].substr(-1);
-        $scope.advancedOptions = AppUtils.serializeAdvancedOptions(data.data);
+        $scope.updateChannel = data.data['update-channel'];
+        $scope.originalUpdateChannel = data.data['update-channel'];
+        $scope.usageReporterLevel = data.data['usage-reporter-level'];
+        $scope.advancedOptions = AppUtils.serializeAdvancedOptionsToArray(data.data);
+
     }, AppUtils.connectionError);
 
 
@@ -21,8 +35,10 @@ backupApp.controller('SystemSettingsController', function($scope, $location, App
         var patchdata = {
             'server-passphrase': $scope.requireRemotePassword ? $scope.remotePassword : '',
 
-            'server-listen-interface': $scope.allowRemoteAccess ? any : 'loopback',
-            'startup-delay': $scope.startupDelayDurationValue + '' + $scope.startupDelayDurationMultiplier
+            'server-listen-interface': $scope.allowRemoteAccess ? 'any' : 'loopback',
+            'startup-delay': $scope.startupDelayDurationValue + '' + $scope.startupDelayDurationMultiplier,
+            'update-channel': $scope.updateChannel,
+            'usage-reporter-level': $scope.usageReporterLevel
         }
 
 
@@ -38,13 +54,37 @@ backupApp.controller('SystemSettingsController', function($scope, $location, App
 
         AppUtils.mergeAdvancedOptions($scope.advancedOptions, patchdata, $scope.rawdata);
 
-        AppService.patch('/serversettings', patchdata).then(
+        AppService.patch('/serversettings', patchdata, {headers: {'Content-Type': 'application/json; charset=utf-8'}}).then(
             function() {
+                // Check for updates if we changed the channel
+                if ($scope.updateChannel != $scope.originalUpdateChannel)
+                    AppService.post('/updates/check');
+
                 $location.path('/');
             },
-            AppUtils.connectionError(Localization.localize('Failed to save'))
+            AppUtils.connectionError(Localization.localize('Failed to save: '))
         );
+    };
 
+    $scope.suppressDonationMessages = function() {
+        AppService.post('/systeminfo/suppressdonationmessages').then(
+            function() 
+            { 
+                $scope.SystemInfo.SuppressDonationMessages = true; 
+                SystemInfo.notifyChanged();
+            }, 
+            AppUtils.connectionError('Operation failed: ')
+        );
+    };
 
-    }
+    $scope.displayDonationMessages = function() {
+        AppService.post('/systeminfo/showdonationmessages').then(
+            function() 
+            { 
+                $scope.SystemInfo.SuppressDonationMessages = false; 
+                SystemInfo.notifyChanged();
+            }, 
+            AppUtils.connectionError('Operation failed: ')
+        );
+    };
 });
